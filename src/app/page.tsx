@@ -5,12 +5,34 @@ import { useState } from "react";
 export default function Home() {
   const [transcript, setTranscript] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<unknown>(null);
 
-  const handleSummarize = () => {
+  const handleSummarize = async () => {
     setLoading(true);
-    setTimeout(() => {
+    setError("");
+
+    try {
+      const response = await fetch("/api/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data?.error || "The AI could not process this transcript.");
+        setResult(null);
+      } else {
+        setResult(data);
+      }
+    } catch {
+      setError("The AI could not process this transcript.");
+      setResult(null);
+    } finally {
       setLoading(false);
-    }, 2000);
+    }
   };
 
   return (
@@ -33,6 +55,7 @@ export default function Home() {
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
             placeholder="Paste your meeting transcript here..."
+            autoComplete="off"
             className="w-full resize-y rounded-md border border-gray-300 p-3 text-sm text-[#1B2A41] focus:border-[#E8710A] focus:outline-none focus:ring-1 focus:ring-[#E8710A]"
           />
         </div>
@@ -46,12 +69,16 @@ export default function Home() {
           {loading ? "Thinking..." : "Summarize"}
         </button>
 
+        {error && <p className="text-sm text-red-600">{error}</p>}
+
         <div className="flex flex-col gap-4">
           <section className="rounded-lg bg-[#F4F5F7] p-4">
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#1B2A41]">
               Executive Summary
             </h2>
-            <p className="text-sm text-gray-600">Nothing yet.</p>
+            <p className="whitespace-pre-wrap text-sm text-gray-600">
+              {result ? JSON.stringify(result, null, 2) : "Nothing yet."}
+            </p>
           </section>
 
           <section className="rounded-lg bg-[#F4F5F7] p-4">
