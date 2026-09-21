@@ -1,6 +1,8 @@
-import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
+import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { toneSentence } from "@/lib/tone";
+import { supabaseServer } from "@/lib/supabaseServer";
 
 const SYSTEM_PROMPT =
   "You are a meeting analyst. Read the transcript and reply with JSON only, " +
@@ -12,7 +14,33 @@ const SYSTEM_PROMPT =
   "transcript in the form 'Month D'. If no date is stated, set due to the " +
   "word 'none'. Never leave due blank.";
 
-export async function POST(request: Request) {
+const DAILY_LIMIT = 5;
+
+const ANON_COOKIE_NAME = "mi_anon_id";
+const ANON_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
+function todayUTC(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function withAnonCookie(
+  response: NextResponse,
+  anonId: string,
+  isNewAnonId: boolean
+): NextResponse {
+  if (isNewAnonId) {
+    response.cookies.set(ANON_COOKIE_NAME, anonId, {
+      httpOnly: true,
+      maxAge: ANON_COOKIE_MAX_AGE,
+      path: "/",
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+  }
+  return response;
+}
+
+export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const transcript = body?.transcript;
 
@@ -20,6 +48,39 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Transcript is required." },
       { status: 400 }
+    );
+  }
+
+  const existingAnonId = request.cookies.get(ANON_COOKIE_NAME)?.value;
+  const isNewAnonId = !existingAnonId;
+  const anonId = existingAnonId || randomUUID();
+  const day = todayUTC();
+
+  const { data: usageRow, error: usageReadError } = await supabaseServer
+    .from("usage")
+    .select("count")
+    .eq("anon_id", anonId)
+    .eq("day", day)
+    .maybeSingle();
+
+  if (usageReadError) {
+    console.error("usage lookup failed:", usageReadError);
+  }
+
+  const currentCount = usageRow?.count ?? 0;
+
+  if (currentCount >= DAILY_LIMIT) {
+    return withAnonCookie(
+      NextResponse.json(
+        {
+          error: "limit",
+          message:
+            "You've hit today's limit of 5 summaries. Come back tomorrow.",
+        },
+        { status: 429 }
+      ),
+      anonId,
+      isNewAnonId
     );
   }
 
@@ -47,9 +108,29 @@ export async function POST(request: Request) {
     }
 
     const parsed = JSON.parse(content);
-    return NextResponse.json(parsed, { status: 200 });
+
+    const { error: usageWriteError } = await supabaseServer
+      .from("usage")
+      .upsert(
+        { anon_id: anonId, day, count: currentCount + 1 },
+        { onConflict: "anon_id,day" }
+      );
+
+    if (usageWriteError) {
+      console.error("usage update failed:", usageWriteError);
+    }
+
+    return withAnonCookie(
+      NextResponse.json(parsed, { status: 200 }),
+      anonId,
+      isNewAnonId
+    );
   } catch (err) {
     console.error("summarize failed:", err);
-    return NextResponse.json({ error: "ai_failed" }, { status: 502 });
+    return withAnonCookie(
+      NextResponse.json({ error: "ai_failed" }, { status: 502 }),
+      anonId,
+      isNewAnonId
+    );
   }
 }

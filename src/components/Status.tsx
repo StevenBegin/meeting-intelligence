@@ -17,6 +17,14 @@ export function LoadingSkeleton() {
   );
 }
 
+export function LimitNotice({ message }: { message: string }) {
+  return (
+    <div className="rounded-lg bg-[#F4F5F7] p-4">
+      <p className="text-sm text-[#1B2A41]">{message}</p>
+    </div>
+  );
+}
+
 export function ErrorCard({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="flex flex-col items-start gap-3 rounded-lg bg-[#F4F5F7] p-4">

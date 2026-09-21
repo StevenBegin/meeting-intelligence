@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import Results, { SummaryResult } from "@/components/Results";
-import { Spinner, LoadingSkeleton, ErrorCard } from "@/components/Status";
+import {
+  Spinner,
+  LoadingSkeleton,
+  ErrorCard,
+  LimitNotice,
+} from "@/components/Status";
 import { Tone } from "@/lib/tone";
 
 type FollowupResult = {
@@ -33,6 +38,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [emptyError, setEmptyError] = useState(false);
+  const [limitMessage, setLimitMessage] = useState<string | null>(null);
   const [result, setResult] = useState<SummaryResult | null>(null);
 
   const [tone, setTone] = useState<Tone>("Friendly");
@@ -53,6 +59,7 @@ export default function Home() {
 
     setLoading(true);
     setError(false);
+    setLimitMessage(null);
     setFollowup(null);
     setFollowupError(false);
     setFollowupTone(null);
@@ -70,7 +77,13 @@ export default function Home() {
 
       const data = await response.json().catch(() => null);
 
-      if (!response.ok || !isSummaryResult(data)) {
+      if (response.status === 429) {
+        setLimitMessage(
+          (data && typeof data.message === "string" && data.message) ||
+            "You've hit today's limit of 5 summaries. Come back tomorrow."
+        );
+        setResult(null);
+      } else if (!response.ok || !isSummaryResult(data)) {
         setError(true);
         setResult(null);
       } else {
@@ -202,6 +215,8 @@ export default function Home() {
 
         {loading ? (
           <LoadingSkeleton />
+        ) : limitMessage ? (
+          <LimitNotice message={limitMessage} />
         ) : error ? (
           <ErrorCard onRetry={handleSummarize} />
         ) : (
