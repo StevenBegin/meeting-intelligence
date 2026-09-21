@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Results, { SummaryResult } from "@/components/Results";
 import {
   Spinner,
@@ -13,6 +13,11 @@ import { Tone } from "@/lib/tone";
 type FollowupResult = {
   subject: string;
   body: string;
+};
+
+type Usage = {
+  count: number;
+  limit: number;
 };
 
 const REQUEST_TIMEOUT_MS = 30000;
@@ -47,6 +52,32 @@ export default function Home() {
   const [followup, setFollowup] = useState<FollowupResult | null>(null);
   const [followupTone, setFollowupTone] = useState<Tone | null>(null);
   const [copyLabel, setCopyLabel] = useState("Copy");
+  const [usage, setUsage] = useState<Usage | null>(null);
+
+  const fetchUsage = async () => {
+    try {
+      const response = await fetch("/api/usage");
+      const data = await response.json().catch(() => null);
+
+      if (
+        !response.ok ||
+        !data ||
+        typeof data.count !== "number" ||
+        typeof data.limit !== "number"
+      ) {
+        setUsage(null);
+        return;
+      }
+
+      setUsage({ count: data.count, limit: data.limit });
+    } catch {
+      setUsage(null);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsage();
+  }, []);
 
   const handleSummarize = async () => {
     if (loading) return;
@@ -88,6 +119,7 @@ export default function Home() {
         setResult(null);
       } else {
         setResult(data);
+        fetchUsage();
       }
     } catch {
       setError(true);
@@ -212,6 +244,18 @@ export default function Home() {
             </select>
           </div>
         </div>
+
+        {usage && (
+          <p
+            className={`text-xs ${
+              usage.count >= usage.limit
+                ? "text-[#E8710A]"
+                : "text-gray-600"
+            }`}
+          >
+            Summaries today: {usage.count} of {usage.limit}
+          </p>
+        )}
 
         {loading ? (
           <LoadingSkeleton />

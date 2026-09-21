@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { toneSentence } from "@/lib/tone";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { ANON_COOKIE_NAME, DAILY_LIMIT, todayUTC } from "@/lib/usage";
 
 const SYSTEM_PROMPT =
   "You are a meeting analyst. Read the transcript and reply with JSON only, " +
@@ -14,14 +15,7 @@ const SYSTEM_PROMPT =
   "transcript in the form 'Month D'. If no date is stated, set due to the " +
   "word 'none'. Never leave due blank.";
 
-const DAILY_LIMIT = 5;
-
-const ANON_COOKIE_NAME = "mi_anon_id";
 const ANON_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
-
-function todayUTC(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function withAnonCookie(
   response: NextResponse,
