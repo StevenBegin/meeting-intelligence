@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Results, { SummaryResult } from "@/components/Results";
 
 export default function Home() {
   const [transcript, setTranscript] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<unknown>(null);
+  const [result, setResult] = useState<SummaryResult | null>(null);
 
   const handleSummarize = async () => {
     setLoading(true);
@@ -71,30 +72,7 @@ export default function Home() {
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <div className="flex flex-col gap-4">
-          <section className="rounded-lg bg-[#F4F5F7] p-4">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#1B2A41]">
-              Executive Summary
-            </h2>
-            <p className="whitespace-pre-wrap text-sm text-gray-600">
-              {result ? JSON.stringify(result, null, 2) : "Nothing yet."}
-            </p>
-          </section>
-
-          <section className="rounded-lg bg-[#F4F5F7] p-4">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#1B2A41]">
-              Key Decisions
-            </h2>
-            <p className="text-sm text-gray-600">Nothing yet.</p>
-          </section>
-
-          <section className="rounded-lg bg-[#F4F5F7] p-4">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#1B2A41]">
-              Action Items
-            </h2>
-            <p className="text-sm text-gray-600">Nothing yet.</p>
-          </section>
-        </div>
+        <Results result={result} />
       </main>
     </div>
   );
