@@ -3,15 +3,27 @@
 import { useState } from "react";
 import Results, { SummaryResult } from "@/components/Results";
 
+type FollowupResult = {
+  subject: string;
+  body: string;
+};
+
 export default function Home() {
   const [transcript, setTranscript] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<SummaryResult | null>(null);
 
+  const [followupLoading, setFollowupLoading] = useState(false);
+  const [followupError, setFollowupError] = useState("");
+  const [followup, setFollowup] = useState<FollowupResult | null>(null);
+  const [copyLabel, setCopyLabel] = useState("Copy");
+
   const handleSummarize = async () => {
     setLoading(true);
     setError("");
+    setFollowup(null);
+    setFollowupError("");
 
     try {
       const response = await fetch("/api/summarize", {
@@ -33,6 +45,53 @@ export default function Home() {
       setResult(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDraftFollowup = async () => {
+    if (!result) return;
+
+    setFollowupLoading(true);
+    setFollowupError("");
+
+    try {
+      const response = await fetch("/api/followup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript, summary: result }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setFollowupError(
+          data?.error || "The AI could not draft a follow-up email."
+        );
+        setFollowup(null);
+      } else {
+        setFollowup(data);
+        setCopyLabel("Copy");
+      }
+    } catch {
+      setFollowupError("The AI could not draft a follow-up email.");
+      setFollowup(null);
+    } finally {
+      setFollowupLoading(false);
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!followup) return;
+
+    try {
+      await navigator.clipboard.writeText(
+        `${followup.subject}\n\n${followup.body}`
+      );
+      setCopyLabel("Copied");
+      setTimeout(() => setCopyLabel("Copy"), 2000);
+    } catch {
+      setCopyLabel("Copy failed");
+      setTimeout(() => setCopyLabel("Copy"), 2000);
     }
   };
 
@@ -73,6 +132,39 @@ export default function Home() {
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         <Results result={result} />
+
+        {result && (
+          <button
+            type="button"
+            onClick={handleDraftFollowup}
+            disabled={followupLoading}
+            className="w-full rounded-md bg-[#E8710A] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#c95f08] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:self-start"
+          >
+            {followupLoading ? "Drafting..." : "Draft follow-up email"}
+          </button>
+        )}
+
+        {followupError && <p className="text-sm text-red-600">{followupError}</p>}
+
+        {followup && (
+          <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-sm font-semibold text-[#1B2A41]">
+                {followup.subject}
+              </h2>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="shrink-0 rounded-md border border-[#1B2A41] px-3 py-1.5 text-xs font-semibold text-[#1B2A41] transition-colors hover:bg-[#1B2A41] hover:text-white"
+              >
+                {copyLabel}
+              </button>
+            </div>
+            <p className="mt-3 whitespace-pre-wrap text-sm text-gray-700">
+              {followup.body}
+            </p>
+          </section>
+        )}
       </main>
     </div>
   );
