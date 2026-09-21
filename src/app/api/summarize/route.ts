@@ -23,7 +23,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const client = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    timeout: 30000,
+  });
 
   try {
     const completion = await client.chat.completions.create({
@@ -45,10 +48,8 @@ export async function POST(request: Request) {
 
     const parsed = JSON.parse(content);
     return NextResponse.json(parsed, { status: 200 });
-  } catch {
-    return NextResponse.json(
-      { error: "The AI could not process this transcript." },
-      { status: 500 }
-    );
+  } catch (err) {
+    console.error("summarize failed:", err);
+    return NextResponse.json({ error: "ai_failed" }, { status: 502 });
   }
 }
