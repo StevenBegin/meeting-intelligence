@@ -7,7 +7,9 @@ const SYSTEM_PROMPT =
   "key_decisions (an array of short strings), action_items (an array of " +
   "objects with keys owner, task, due). If something is unknown, use an " +
   "empty string or empty array. Do not invent details that are not in the " +
-  "transcript.";
+  "transcript. Every action item must include a due date taken from the " +
+  "transcript in the form 'Month D'. If no date is stated, set due to the " +
+  "word 'none'. Never leave due blank.";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
