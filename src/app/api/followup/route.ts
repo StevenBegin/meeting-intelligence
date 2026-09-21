@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { toneSentence } from "@/lib/tone";
 
 const SYSTEM_PROMPT =
   "You are a meeting organizer writing a follow-up email. You will be given " +
@@ -36,7 +37,10 @@ export async function POST(request: Request) {
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "system",
+          content: `${SYSTEM_PROMPT} ${toneSentence(body?.tone)}`,
+        },
         {
           role: "user",
           content: JSON.stringify({ transcript, summary }),

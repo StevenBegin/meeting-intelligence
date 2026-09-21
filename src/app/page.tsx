@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Results, { SummaryResult } from "@/components/Results";
+import { Tone } from "@/lib/tone";
 
 type FollowupResult = {
   subject: string;
@@ -14,9 +15,11 @@ export default function Home() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<SummaryResult | null>(null);
 
+  const [tone, setTone] = useState<Tone>("Friendly");
   const [followupLoading, setFollowupLoading] = useState(false);
   const [followupError, setFollowupError] = useState("");
   const [followup, setFollowup] = useState<FollowupResult | null>(null);
+  const [followupTone, setFollowupTone] = useState<Tone | null>(null);
   const [copyLabel, setCopyLabel] = useState("Copy");
 
   const handleSummarize = async () => {
@@ -24,12 +27,13 @@ export default function Home() {
     setError("");
     setFollowup(null);
     setFollowupError("");
+    setFollowupTone(null);
 
     try {
       const response = await fetch("/api/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript }),
+        body: JSON.stringify({ transcript, tone }),
       });
 
       const data = await response.json();
@@ -58,7 +62,7 @@ export default function Home() {
       const response = await fetch("/api/followup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript, summary: result }),
+        body: JSON.stringify({ transcript, summary: result, tone }),
       });
 
       const data = await response.json();
@@ -70,6 +74,7 @@ export default function Home() {
         setFollowup(null);
       } else {
         setFollowup(data);
+        setFollowupTone(tone);
         setCopyLabel("Copy");
       }
     } catch {
@@ -120,14 +125,35 @@ export default function Home() {
           />
         </div>
 
-        <button
-          type="button"
-          onClick={handleSummarize}
-          disabled={loading || transcript.trim().length === 0}
-          className="w-full rounded-md bg-[#1B2A41] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#13202f] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:self-start"
-        >
-          {loading ? "Thinking..." : "Summarize"}
-        </button>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <button
+            type="button"
+            onClick={handleSummarize}
+            disabled={loading || transcript.trim().length === 0}
+            className="w-full rounded-md bg-[#1B2A41] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#13202f] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          >
+            {loading ? "Thinking..." : "Summarize"}
+          </button>
+
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="tone"
+              className="text-sm font-medium text-[#1B2A41]"
+            >
+              Tone
+            </label>
+            <select
+              id="tone"
+              value={tone}
+              onChange={(e) => setTone(e.target.value as Tone)}
+              className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm text-[#1B2A41] focus:border-[#E8710A] focus:outline-none focus:ring-1 focus:ring-[#E8710A] sm:flex-none"
+            >
+              <option value="Formal">Formal</option>
+              <option value="Friendly">Friendly</option>
+              <option value="Executive">Executive</option>
+            </select>
+          </div>
+        </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -140,7 +166,11 @@ export default function Home() {
             disabled={followupLoading}
             className="w-full rounded-md bg-[#E8710A] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#c95f08] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:self-start"
           >
-            {followupLoading ? "Drafting..." : "Draft follow-up email"}
+            {followupLoading
+              ? "Drafting..."
+              : followup && tone !== followupTone
+                ? "Regenerate email"
+                : "Draft follow-up email"}
           </button>
         )}
 
