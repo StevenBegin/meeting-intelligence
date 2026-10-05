@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { toneSentence } from "@/lib/tone";
+import { resolveTone, toneSentence } from "@/lib/tone";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { createClient } from "@/lib/supabase/server";
 import { ANON_COOKIE_NAME, DAILY_LIMIT, todayUTC } from "@/lib/usage";
@@ -128,6 +128,38 @@ export async function POST(request: NextRequest) {
 
     if (usageWriteError) {
       console.error("usage update failed:", usageWriteError);
+    }
+
+    // Save to history. user_id comes only from the server session, and the
+    // insert uses the session client so RLS checks it. A failure here is
+    // logged but never blocks returning the summary.
+    try {
+      const { error: historyWriteError } = await supabase
+        .from("summaries")
+        .insert({
+          user_id: user.id,
+          transcript,
+          summary: typeof parsed.summary === "string" ? parsed.summary : "",
+          key_decisions: Array.isArray(parsed.key_decisions)
+            ? parsed.key_decisions
+            : [],
+          action_items: Array.isArray(parsed.action_items)
+            ? parsed.action_items
+            : [],
+          email_subject:
+            typeof parsed.email_subject === "string"
+              ? parsed.email_subject
+              : null,
+          email_body:
+            typeof parsed.email_body === "string" ? parsed.email_body : null,
+          tone: resolveTone(body?.tone),
+        });
+
+      if (historyWriteError) {
+        console.error("history insert failed:", historyWriteError);
+      }
+    } catch (historyErr) {
+      console.error("history insert failed:", historyErr);
     }
 
     return withAnonCookie(

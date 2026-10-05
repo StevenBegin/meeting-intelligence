@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import HistoryList, { type HistoryItem } from "@/components/HistoryList";
 import Summarizer from "@/components/Summarizer";
 import { createClient } from "@/lib/supabase/server";
 
@@ -10,6 +11,17 @@ export default async function DashboardPage() {
 
   if (!user) {
     redirect("/login");
+  }
+
+  const { data: history, error: historyError } = await supabase
+    .from("summaries")
+    .select("id, created_at, tone, summary, key_decisions, action_items")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (historyError) {
+    console.error("history load failed:", historyError);
   }
 
   return (
@@ -26,6 +38,11 @@ export default async function DashboardPage() {
         </div>
 
         <Summarizer />
+
+        <HistoryList
+          items={(history ?? []) as HistoryItem[]}
+          loadFailed={!!historyError}
+        />
       </main>
     </div>
   );

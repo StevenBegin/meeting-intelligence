@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Results, { SummaryResult } from "@/components/Results";
 import {
   Spinner,
@@ -39,6 +40,7 @@ function isFollowupResult(data: unknown): data is FollowupResult {
 }
 
 export default function Summarizer() {
+  const router = useRouter();
   const [transcript, setTranscript] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -126,6 +128,8 @@ export default function Summarizer() {
       } else {
         setResult(data);
         fetchUsage();
+        // Re-render the server dashboard so the history list shows the new row.
+        router.refresh();
       }
     } catch {
       setError(true);
