@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Results, { SummaryResult } from "@/components/Results";
 import {
@@ -14,11 +14,6 @@ import { Tone } from "@/lib/tone";
 type FollowupResult = {
   subject: string;
   body: string;
-};
-
-type Usage = {
-  count: number;
-  limit: number;
 };
 
 const REQUEST_TIMEOUT_MS = 30000;
@@ -39,7 +34,15 @@ function isFollowupResult(data: unknown): data is FollowupResult {
   return typeof d.subject === "string" && typeof d.body === "string";
 }
 
-export default function Summarizer() {
+// usageCount and usageLimit come from the dashboard, which counts on the
+// server. router.refresh() re-runs that count after each summary.
+export default function Summarizer({
+  usageCount,
+  usageLimit,
+}: {
+  usageCount: number;
+  usageLimit: number;
+}) {
   const router = useRouter();
   const [transcript, setTranscript] = useState("");
   const [loading, setLoading] = useState(false);
@@ -54,33 +57,6 @@ export default function Summarizer() {
   const [followup, setFollowup] = useState<FollowupResult | null>(null);
   const [followupTone, setFollowupTone] = useState<Tone | null>(null);
   const [copyLabel, setCopyLabel] = useState("Copy");
-  const [usage, setUsage] = useState<Usage | null>(null);
-
-  const fetchUsage = async () => {
-    try {
-      const response = await fetch("/api/usage");
-      const data = await response.json().catch(() => null);
-
-      if (
-        !response.ok ||
-        !data ||
-        typeof data.count !== "number" ||
-        typeof data.limit !== "number"
-      ) {
-        setUsage(null);
-        return;
-      }
-
-      setUsage({ count: data.count, limit: data.limit });
-    } catch {
-      setUsage(null);
-    }
-  };
-
-  useEffect(() => {
-    fetchUsage();
-  }, []);
-
   const handleSummarize = async () => {
     if (loading) return;
 
@@ -122,13 +98,13 @@ export default function Summarizer() {
             "You've hit today's limit of 5 summaries. Come back tomorrow."
         );
         setResult(null);
+        router.refresh();
       } else if (!response.ok || !isSummaryResult(data)) {
         setError(true);
         setResult(null);
       } else {
         setResult(data);
-        fetchUsage();
-        // Re-render the server dashboard so the history list shows the new row.
+        // Re-render the server dashboard so the counter and history update.
         router.refresh();
       }
     } catch {
@@ -250,17 +226,13 @@ export default function Summarizer() {
         </div>
       </div>
 
-      {usage && (
-        <p
-          className={`text-xs ${
-            usage.count >= usage.limit
-              ? "text-[#E8710A]"
-              : "text-gray-600"
-          }`}
-        >
-          Summaries today: {usage.count} of {usage.limit}
-        </p>
-      )}
+      <p
+        className={`text-xs ${
+          usageCount >= usageLimit ? "text-[#E8710A]" : "text-gray-600"
+        }`}
+      >
+        Summaries today: {Math.min(usageCount, usageLimit)} of {usageLimit}
+      </p>
 
       {loading ? (
         <LoadingSkeleton />

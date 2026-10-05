@@ -1,10 +1,8 @@
-import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { resolveTone, toneSentence } from "@/lib/tone";
-import { supabaseServer } from "@/lib/supabaseServer";
 import { createClient } from "@/lib/supabase/server";
-import { ANON_COOKIE_NAME, DAILY_LIMIT, todayUTC } from "@/lib/usage";
+import { DAILY_LIMIT, countSummariesToday } from "@/lib/usage";
 
 const SYSTEM_PROMPT =
   "You are a meeting analyst. Read the transcript and reply with JSON only, " +
@@ -15,25 +13,6 @@ const SYSTEM_PROMPT =
   "transcript. Every action item must include a due date taken from the " +
   "transcript in the form 'Month D'. If no date is stated, set due to the " +
   "word 'none'. Never leave due blank.";
-
-const ANON_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
-
-function withAnonCookie(
-  response: NextResponse,
-  anonId: string,
-  isNewAnonId: boolean
-): NextResponse {
-  if (isNewAnonId) {
-    response.cookies.set(ANON_COOKIE_NAME, anonId, {
-      httpOnly: true,
-      maxAge: ANON_COOKIE_MAX_AGE,
-      path: "/",
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    });
-  }
-  return response;
-}
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -61,36 +40,25 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const existingAnonId = request.cookies.get(ANON_COOKIE_NAME)?.value;
-  const isNewAnonId = !existingAnonId;
-  const anonId = existingAnonId || randomUUID();
-  const day = todayUTC();
-
-  const { data: usageRow, error: usageReadError } = await supabaseServer
-    .from("usage")
-    .select("count")
-    .eq("anon_id", anonId)
-    .eq("day", day)
-    .maybeSingle();
-
-  if (usageReadError) {
+  // Per-user daily cap: count this user's summaries created today (UTC).
+  // Runs on the server as the logged-in user; nothing from the browser is
+  // trusted for the count.
+  let currentCount: number;
+  try {
+    currentCount = await countSummariesToday(supabase, user.id);
+  } catch (usageReadError) {
+    // Fail closed: if we cannot read the count, do not spend an AI call.
     console.error("usage lookup failed:", usageReadError);
+    return NextResponse.json({ error: "usage_failed" }, { status: 503 });
   }
 
-  const currentCount = usageRow?.count ?? 0;
-
   if (currentCount >= DAILY_LIMIT) {
-    return withAnonCookie(
-      NextResponse.json(
-        {
-          error: "limit",
-          message:
-            "You've hit today's limit of 5 summaries. Come back tomorrow.",
-        },
-        { status: 429 }
-      ),
-      anonId,
-      isNewAnonId
+    return NextResponse.json(
+      {
+        error: "limit",
+        message: "You've hit today's limit of 5 summaries. Come back tomorrow.",
+      },
+      { status: 429 }
     );
   }
 
@@ -119,20 +87,10 @@ export async function POST(request: NextRequest) {
 
     const parsed = JSON.parse(content);
 
-    const { error: usageWriteError } = await supabaseServer
-      .from("usage")
-      .upsert(
-        { anon_id: anonId, day, count: currentCount + 1 },
-        { onConflict: "anon_id,day" }
-      );
-
-    if (usageWriteError) {
-      console.error("usage update failed:", usageWriteError);
-    }
-
     // Save to history. user_id comes only from the server session, and the
-    // insert uses the session client so RLS checks it. A failure here is
-    // logged but never blocks returning the summary.
+    // insert uses the session client so RLS checks it. This row is also what
+    // the daily cap counts. A failure here is logged but never blocks
+    // returning the summary.
     try {
       const { error: historyWriteError } = await supabase
         .from("summaries")
@@ -162,17 +120,9 @@ export async function POST(request: NextRequest) {
       console.error("history insert failed:", historyErr);
     }
 
-    return withAnonCookie(
-      NextResponse.json(parsed, { status: 200 }),
-      anonId,
-      isNewAnonId
-    );
+    return NextResponse.json(parsed, { status: 200 });
   } catch (err) {
     console.error("summarize failed:", err);
-    return withAnonCookie(
-      NextResponse.json({ error: "ai_failed" }, { status: 502 }),
-      anonId,
-      isNewAnonId
-    );
+    return NextResponse.json({ error: "ai_failed" }, { status: 502 });
   }
 }
