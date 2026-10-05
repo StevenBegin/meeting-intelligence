@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { toneSentence } from "@/lib/tone";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { createClient } from "@/lib/supabase/server";
 import { ANON_COOKIE_NAME, DAILY_LIMIT, todayUTC } from "@/lib/usage";
 
 const SYSTEM_PROMPT =
@@ -35,6 +36,21 @@ function withAnonCookie(
 }
 
 export async function POST(request: NextRequest) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json(
+      {
+        error: "unauthorized",
+        message: "Please log in to summarize a transcript.",
+      },
+      { status: 401 }
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const transcript = body?.transcript;
 
